@@ -1,0 +1,3 @@
+flask
+xhtml2pdf
+gunicorn

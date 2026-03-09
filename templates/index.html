@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>윤성 검수시스템 ver2.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+    <style>
+        :root { --primary-color: #3182ce; --danger-color: #e53e3e; --bg-color: #f7fafc; --preview-color: #38a169; }
+        body { font-family: "Pretendard", sans-serif; background: var(--bg-color); margin: 0; padding: 20px 10px; }
+        .form-card { background: white; max-width: 650px; margin: 0 auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        h2 { text-align: center; color: #2d3748; margin-bottom: 20px; }
+        label { display: block; margin-top: 15px; font-weight: 700; color: #4a5568; }
+        input, select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 16px; box-sizing: border-box; }
+        .upload-btns { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-upload { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 15px 5px; border: 2px solid var(--primary-color); border-radius: 12px; color: var(--primary-color); font-weight: bold; cursor: pointer; text-align: center; }
+        .hidden-input { display: none; }
+        .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .preview-item { position: relative; border: 1px solid #ddd; border-radius: 10px; padding: 5px; background: #fff; }
+        .preview-img { width: 100%; height: 120px; object-fit: contain; }
+        .remove-btn { position: absolute; top: -8px; right: -8px; background: var(--danger-color); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-weight: bold; z-index: 5; }
+        .rotate-single-btn { position: absolute; bottom: 5px; left: 5px; background: rgba(255,255,255,0.8); border: 1px solid #cbd5e0; border-radius: 5px; padding: 4px 8px; font-size: 12px; cursor: pointer; z-index: 5; }
+        #signature-pad { border: 2px solid #cbd5e0; border-radius: 15px; background: #fff; width: 100%; touch-action: none; margin-top: 5px; }
+        .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-main { flex: 1; padding: 18px; color: white; border: none; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-main:disabled { background: #cbd5e0 !important; }
+        .btn-preview { background: var(--preview-color); }
+        .btn-send { background: var(--primary-color); }
+        #loading { display: none; text-align: center; color: var(--primary-color); font-weight: bold; margin: 10px 0; }
+        /* 미리보기 모달 */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 100; }
+        .modal-content { position: absolute; top: 5%; left: 5%; width: 90%; height: 85%; background: white; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f7fafc; border-bottom: 1px solid #e2e8f0; }
+        .modal-header h3 { margin: 0; font-size: 16px; }
+        .modal-close { background: var(--danger-color); color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: bold; cursor: pointer; }
+        .modal-body { flex: 1; }
+        .modal-body iframe { width: 100%; height: 100%; border: none; }
+    </style>
+</head>
+<body>
+    <div class="form-card">
+        <h2>검수보고서 발행 ver2.0</h2>
+        <form id="reportForm">
+            <label>프로젝트 과제</label>
+            <select name="project">{% for p in projects %} <option value="{{p}}">{{p}}</option> {% endfor %}</select>
+            <label>거래처 / 품명</label>
+            <input type="text" name="customer" placeholder="거래처명" required>
+            <input type="text" name="product" placeholder="품목명" required style="margin-top:8px;">
+            <label>검수자 / 날짜</label>
+            <input type="text" name="name" id="inspectorName" placeholder="성함" required>
+            <input type="date" name="date" id="inspectDate" style="margin-top:8px;">
+
+            <label>수신 이메일</label>
+            <input type="email" name="target_email" id="targetEmail" value="{{ default_email }}" placeholder="수신 이메일 주소">
+
+            <label>사진 업로드 (최대 4장)</label>
+            <div class="upload-btns">
+                <label class="btn-upload"><span>📸</span> 즉시 촬영<input type="file" id="camIn" accept="image/*" capture="environment" class="hidden-input"></label>
+                <label class="btn-upload"><span>🖼</span> 갤러리 다중선택<input type="file" id="galIn" accept="image/*" multiple class="hidden-input"></label>
+            </div>
+            <div id="loading">⏳ 사진 최적화 및 HEIC 변환 중...</div>
+            <div class="preview-grid" id="previewGrid"></div>
+
+            <label>서명</label>
+            <canvas id="signature-pad" height="150"></canvas>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button type="button" onclick="clearPad()" style="flex:1; padding:12px; border-radius:12px; border:1px solid #ddd;">지우기</button>
+                <button type="button" onclick="saveDefault()" style="flex:1; padding:12px; border-radius:12px; border:1px solid #ddd;">정보 고정</button>
+            </div>
+            <div class="btn-row">
+                <button type="button" class="btn-main btn-preview" id="previewBtn" onclick="doPreview()">미리보기</button>
+                <button type="submit" class="btn-main btn-send" id="submitBtn">PDF 생성 & 메일 전송</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 미리보기 모달 -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>PDF 미리보기</h3>
+                <button class="modal-close" onclick="closePreview()">닫기</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="previewFrame"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 서명 캔버스 로직
+        const canvas = document.getElementById('signature-pad');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        let drawing = false;
+        function getPos(e) { const r = canvas.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY; return { x: cx - r.left, y: cy - r.top }; }
+        canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
+        canvas.addEventListener('mousemove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineTo(p.x, p.y); ctx.stroke(); });
+        window.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('touchstart', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
+        canvas.addEventListener('touchmove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineWidth = 4; ctx.lineTo(p.x, p.y); ctx.stroke(); });
+
+        // 사진 처리
+        let originalImages = [];
+        let rotationAngles = [];
+        let processedBase64 = [];
+
+        async function handleFiles(files) {
+            document.getElementById('loading').style.display = 'block';
+            for (let file of files) {
+                if (originalImages.length >= 4) break;
+                let target = file;
+                if (file.name.toLowerCase().endsWith('.heic')) {
+                    try {
+                        const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+                        target = new File([blob], "photo.jpg", { type: "image/jpeg" });
+                    } catch (e) { console.error("HEIC 변환 실패", e); continue; }
+                }
+                const imgObj = await loadImage(target);
+                originalImages.push(imgObj);
+                rotationAngles.push(0);
+                const optimizedData = await processImage(imgObj, 0);
+                processedBase64.push(optimizedData);
+            }
+            render();
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function loadImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => resolve(img);
+                }
+            });
+        }
+
+        function processImage(img, angle) {
+            return new Promise((resolve) => {
+                const cvs = document.createElement('canvas');
+                const ctx = cvs.getContext('2d');
+                let w = img.width, h = img.height;
+                const max = 1000;
+                if (angle === 90 || angle === 270) { [w, h] = [h, w]; }
+                if (w > h) { if (w > max) { h *= max/w; w = max; } }
+                else { if (h > max) { w *= max/h; h = max; } }
+                cvs.width = w; cvs.height = h;
+                ctx.translate(w / 2, h / 2);
+                ctx.rotate(angle * Math.PI / 180);
+                if (angle === 90 || angle === 270) {
+                    ctx.drawImage(img, -h / 2, -w / 2, h, w);
+                } else {
+                    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+                }
+                resolve(cvs.toDataURL('image/jpeg', 0.8));
+            });
+        }
+
+        async function rotatePhoto(idx) {
+            document.getElementById('loading').style.display = 'block';
+            rotationAngles[idx] = (rotationAngles[idx] + 90) % 360;
+            const updatedData = await processImage(originalImages[idx], rotationAngles[idx]);
+            processedBase64[idx] = updatedData;
+            render();
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function render() {
+            const grid = document.getElementById('previewGrid');
+            grid.innerHTML = '';
+            processedBase64.forEach((data, i) => {
+                grid.innerHTML += `
+                    <div class="preview-item">
+                        <img src="${data}" class="preview-img">
+                        <button type="button" class="remove-btn" onclick="removePhoto(${i})">×</button>
+                        <button type="button" class="rotate-single-btn" onclick="rotatePhoto(${i})">🔄 회전</button>
+                    </div>`;
+            });
+        }
+
+        function removePhoto(i) {
+            originalImages.splice(i, 1);
+            rotationAngles.splice(i, 1);
+            processedBase64.splice(i, 1);
+            render();
+        }
+
+        document.getElementById('camIn').onchange = e => handleFiles(e.target.files);
+        document.getElementById('galIn').onchange = e => handleFiles(e.target.files);
+
+        // FormData 생성 공통
+        function buildFormData() {
+            const fd = new FormData(document.getElementById('reportForm'));
+            fd.append('signature_data', canvas.toDataURL());
+            processedBase64.forEach((data, i) => fd.append(`photo${i+1}_data`, data));
+            return fd;
+        }
+
+        // [4번] 미리보기
+        function isMobile() {
+            return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+
+        async function doPreview() {
+            const btn = document.getElementById('previewBtn');
+            btn.disabled = true; btn.innerText = "⏳ 생성 중...";
+            try {
+                const fd = buildFormData();
+                const res = await fetch('/preview', { method: 'POST', body: fd });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    if (isMobile()) {
+                        // 모바일: 새 탭에서 PDF 열기
+                        window.open(url, '_blank');
+                    } else {
+                        // PC: 모달 iframe으로 표시
+                        document.getElementById('previewFrame').src = url;
+                        document.getElementById('previewModal').style.display = 'block';
+                    }
+                } else {
+                    alert("미리보기 생성 실패");
+                }
+            } catch (err) { alert("네트워크 오류"); }
+            finally { btn.disabled = false; btn.innerText = "미리보기"; }
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').style.display = 'none';
+            document.getElementById('previewFrame').src = '';
+        }
+
+        // [9번] 제출 + 메일 결과 알림
+        document.getElementById('reportForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true; btn.innerText = "⏳ 전송 중...";
+            const fd = buildFormData();
+
+            try {
+                const res = await fetch('/generate', { method: 'POST', body: fd });
+                const result = await res.json();
+
+                if (!result.success) {
+                    alert("PDF 생성 실패: " + (result.error || "알 수 없는 오류"));
+                    return;
+                }
+
+                // PDF 다운로드
+                const pdfBytes = Uint8Array.from(atob(result.pdf_data), c => c.charCodeAt(0));
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = result.file_name;
+                a.click();
+
+                // 메일 결과 알림
+                if (result.mail_ok) {
+                    alert("✅ " + result.target_email + " 발송 완료!");
+                } else {
+                    alert("⚠️ PDF는 생성되었지만 메일 발송 실패!\n\n사유: " + (result.mail_error || "알 수 없는 오류") + "\n\n수신주소: " + result.target_email);
+                }
+            } catch (err) {
+                alert("네트워크 오류");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "PDF 생성 & 메일 전송";
+            }
+        };
+
+        function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        function saveDefault() {
+            localStorage.setItem('dfName', document.getElementById('inspectorName').value);
+            localStorage.setItem('dfEmail', document.getElementById('targetEmail').value);
+            alert("정보 저장됨");
+        }
+        window.onload = () => {
+            document.getElementById('inspectDate').value = new Date().toISOString().substring(0, 10);
+            if(localStorage.getItem('dfName')) document.getElementById('inspectorName').value = localStorage.getItem('dfName');
+            if(localStorage.getItem('dfEmail')) document.getElementById('targetEmail').value = localStorage.getItem('dfEmail');
+        };
+    </script>
+</body>
+</html>
