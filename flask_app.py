@@ -3,29 +3,22 @@ import io
 import uuid
 import json
 import base64
-import smtplib
 from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 from flask import Flask, render_template, request, send_file, jsonify
 from xhtml2pdf import pisa
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email import encoders
-from email.header import Header
 from urllib.parse import quote
 from PIL import Image
+import resend
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- [이메일 설정] ---
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 DEFAULT_EMAIL = os.environ.get("DEFAULT_EMAIL", "ai-rnd@ysfc.co.kr")
 
 PROJECT_INFO = {
@@ -59,27 +52,14 @@ def generate_doc_number():
 
 def send_pdf_email(file_name, pdf_content, target_email):
     try:
-        msg = MIMEMultipart()
-        msg['From'] = SMTP_USER
-        msg['To'] = target_email
-        msg['Subject'] = Header(f"[{file_name}] 검수확인서 자동 발송", 'utf-8').encode()
-
-        body = f"안녕하세요. 시스템에서 생성된 {file_name} 파일을 보내드립니다."
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(pdf_content)
-        encoders.encode_base64(part)
-
-        encoded_filename = Header(file_name, 'utf-8').encode()
-        part.add_header('Content-Disposition', 'attachment', filename=encoded_filename)
-        msg.attach(part)
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, target_email, msg.as_string())
-        server.quit()
+        pdf_b64 = base64.b64encode(pdf_content).decode('utf-8')
+        r = resend.Emails.send({
+            "from": SENDER_EMAIL,
+            "to": [target_email],
+            "subject": f"[{file_name}] 검수확인서 자동 발송",
+            "html": f"<p>안녕하세요. 시스템에서 생성된 {file_name} 파일을 보내드립니다.</p>",
+            "attachments": [{"filename": file_name, "content": pdf_b64}]
+        })
         return True, ""
     except Exception as e:
         print(f"Mail Error: {e}")
