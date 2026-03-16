@@ -3,7 +3,10 @@
     "allow": [
       "Bash(curl:*)",
       "Bash(gh auth:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(cp:*)",
+      "WebFetch(domain:checking-production-953c.up.railway.app)"
     ]
   }
 }
