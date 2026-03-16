@@ -5,6 +5,9 @@ import json
 import base64
 import smtplib
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 from flask import Flask, render_template, request, send_file, jsonify
 from xhtml2pdf import pisa
 from email.mime.multipart import MIMEMultipart
@@ -13,6 +16,7 @@ from email.mime.text import MIMEText
 from email import encoders
 from email.header import Header
 from urllib.parse import quote
+from PIL import Image
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,9 +24,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # --- [이메일 설정] ---
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_USER = "imdan1220@gmail.com"
-SMTP_PASSWORD = "boul fyac vpxd eqaf"
-DEFAULT_EMAIL = "ai-rnd@ysfc.co.kr"
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+DEFAULT_EMAIL = os.environ.get("DEFAULT_EMAIL", "ai-rnd@ysfc.co.kr")
 
 PROJECT_INFO = {
     "건식과제": {
@@ -98,13 +102,19 @@ def build_pdf(form, is_preview=False):
         date = form.get('date', '')
 
         photo_paths = []
+        MAX_WIDTH = 480
         for i in range(1, 5):
             photo_data = form.get(f'photo{i}_data')
             if photo_data and ',' in photo_data:
                 save_path = os.path.join(BASE_DIR, f"temp_photo_{req_id}_{i}.jpg")
                 _, encoded = photo_data.split(",", 1)
-                with open(save_path, "wb") as f:
-                    f.write(base64.b64decode(encoded))
+                img_bytes = base64.b64decode(encoded)
+                img = Image.open(io.BytesIO(img_bytes))
+                img = img.convert('RGB')
+                if img.width > MAX_WIDTH:
+                    ratio = MAX_WIDTH / img.width
+                    img = img.resize((MAX_WIDTH, int(img.height * ratio)), Image.LANCZOS)
+                img.save(save_path, 'JPEG', quality=90)
                 photo_paths.append(save_path)
                 temp_files.append(save_path)
 

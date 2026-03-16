@@ -98,6 +98,7 @@
         canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
         canvas.addEventListener('mousemove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineTo(p.x, p.y); ctx.stroke(); });
         window.addEventListener('mouseup', () => drawing = false);
+        window.addEventListener('touchend', () => drawing = false);
         canvas.addEventListener('touchstart', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
         canvas.addEventListener('touchmove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineWidth = 4; ctx.lineTo(p.x, p.y); ctx.stroke(); });
 
@@ -193,9 +194,17 @@
         document.getElementById('galIn').onchange = e => handleFiles(e.target.files);
 
         // FormData 생성 공통
+        function isCanvasBlank(c) {
+            const blank = document.createElement('canvas');
+            blank.width = c.width; blank.height = c.height;
+            return c.toDataURL() === blank.toDataURL();
+        }
+
         function buildFormData() {
             const fd = new FormData(document.getElementById('reportForm'));
-            fd.append('signature_data', canvas.toDataURL());
+            if (!isCanvasBlank(canvas)) {
+                fd.append('signature_data', canvas.toDataURL());
+            }
             processedBase64.forEach((data, i) => fd.append(`photo${i+1}_data`, data));
             return fd;
         }

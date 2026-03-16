@@ -1,3 +1,5 @@
 flask
 xhtml2pdf
 gunicorn
+Pillow
+python-dotenv
