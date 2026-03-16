@@ -147,7 +147,9 @@ def build_pdf(form, is_preview=False):
 
         return pdf_bytes, file_name, None
     except Exception as e:
-        return None, None, str(e)
+        import traceback
+        traceback.print_exc()
+        return None, None, f"{type(e).__name__}: {e}"
     finally:
         for f in temp_files:
             try:
