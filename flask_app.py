@@ -75,7 +75,7 @@ def send_pdf_email(file_name, pdf_content, target_email):
         part.add_header('Content-Disposition', 'attachment', filename=encoded_filename)
         msg.attach(part)
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SMTP_USER, target_email, msg.as_string())
