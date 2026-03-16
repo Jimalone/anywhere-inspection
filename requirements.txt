@@ -1,5 +1,5 @@
 flask
-xhtml2pdf
+xhtml2pdf==0.2.16
 gunicorn
 Pillow
 python-dotenv
