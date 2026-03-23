@@ -131,7 +131,7 @@ def build_pdf(form, is_preview=False):
             'project_name': info['full_name'], 'period': info['period'],
             'customer': customer, 'product': product, 'name': name, 'date': date,
             'photo_paths': photo_paths, 'sig_path': sig_path,
-            'font_path': os.path.join(BASE_DIR, "Pretendard-Regular.ttf")
+            'font_path': 'file:///' + os.path.join(BASE_DIR, "Pretendard-Regular.ttf").replace("\\", "/")
         }
 
         rendered_html = render_template('report.html', **context)
