@@ -22,11 +22,11 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- [이메일 설정] ---
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-DEFAULT_EMAIL = os.environ.get("DEFAULT_EMAIL", "ai-rnd@ysfc.co.kr")
+SMTP_SERVER = "portal.ysfc.co.kr"
+SMTP_PORT = 465
+SMTP_USER = "ai-rnd@ysfc.co.kr"
+SMTP_PASSWORD = "rd5925@@"
+DEFAULT_EMAIL = "ai-rnd@ysfc.co.kr"
 
 PROJECT_INFO = {
     "건식과제": {
@@ -75,8 +75,7 @@ def send_pdf_email(file_name, pdf_content, target_email):
         part.add_header('Content-Disposition', 'attachment', filename=encoded_filename)
         msg.attach(part)
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
-        server.starttls()
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SMTP_USER, target_email, msg.as_string())
         server.quit()
