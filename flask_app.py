@@ -5,9 +5,7 @@ import json
 import base64
 import smtplib
 from datetime import datetime
-from dotenv import load_dotenv
 
-load_dotenv()
 from flask import Flask, render_template, request, send_file, jsonify
 from xhtml2pdf import pisa
 from email.mime.multipart import MIMEMultipart
