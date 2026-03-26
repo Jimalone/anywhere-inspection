@@ -51,9 +51,6 @@
             <input type="text" name="name" id="inspectorName" placeholder="성함" required>
             <input type="date" name="date" id="inspectDate" style="margin-top:8px;">
 
-            <label>PDF 첨부 (선택)</label>
-            <input type="file" name="upload_pdf" id="uploadPdf" accept=".pdf" style="padding:8px;">
-
             <label>사진 업로드 (최대 4장)</label>
             <div class="upload-btns">
                 <label class="btn-upload"><span>📸</span> 즉시 촬영<input type="file" id="camIn" accept="image/*" capture="environment" class="hidden-input"></label>
@@ -249,11 +246,6 @@
             const btn = document.getElementById('submitBtn');
             btn.disabled = true; btn.innerText = "⏳ 생성 중...";
             const fd = buildFormData();
-            // 첨부 PDF 추가
-            const uploadInput = document.getElementById('uploadPdf');
-            if (uploadInput.files.length > 0) {
-                fd.append('upload_pdf', uploadInput.files[0]);
-            }
 
             try {
                 const res = await fetch('/generate', { method: 'POST', body: fd });
