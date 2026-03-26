@@ -21,6 +21,8 @@
         .btn-all:hover { background: #1a252f; }
         .btn-upload { display: inline-block; padding: 5px 12px; background: #27ae60; color: #fff; text-decoration: none; border-radius: 4px; font-size: 0.8rem; }
         .btn-upload:hover { background: #219a52; }
+        .btn-delete { display: inline-block; padding: 5px 12px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+        .btn-delete:hover { background: #c0392b; }
         .no-file { color: #aaa; font-size: 0.8rem; }
         .empty { text-align: center; padding: 60px 20px; color: #999; }
         .back-link { display: inline-block; margin-bottom: 15px; color: #3498db; text-decoration: none; font-size: 0.9rem; }
@@ -38,7 +40,10 @@
         <div class="top-bar">
             <span class="summary">총 {{ reports|length }}건</span>
             {% if reports %}
-            <a href="/admin/download-all" class="btn-all">전체 다운로드 (ZIP)</a>
+            <div style="display:flex; gap:8px;">
+                <a href="/admin/download-all" class="btn-all">전체 다운로드 (ZIP)</a>
+                <button class="btn-all" style="background:#e74c3c; border:none; cursor:pointer;" onclick="deleteAll()">전체 삭제</button>
+            </div>
             {% endif %}
         </div>
 
@@ -54,11 +59,12 @@
                     <th>검수자</th>
                     <th class="hide-mobile">첨부</th>
                     <th>PDF</th>
+                    <th>삭제</th>
                 </tr>
             </thead>
             <tbody>
                 {% for r in reports %}
-                <tr>
+                <tr id="row-{{ r.doc_number }}">
                     <td>{{ r.doc_number }}</td>
                     <td>{{ r.date }}</td>
                     <td>{{ r.project }}</td>
@@ -73,6 +79,7 @@
                         {% endif %}
                     </td>
                     <td><a href="/admin/download/{{ r.doc_number }}" class="btn-download">다운로드</a></td>
+                    <td><button class="btn-delete" onclick="deleteReport('{{ r.doc_number }}')">삭제</button></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -81,5 +88,50 @@
         <div class="empty">발행된 검수확인서가 없습니다.</div>
         {% endif %}
     </div>
+
+    <script>
+    async function deleteAll() {
+        if (!confirm("전체 이력을 삭제하시겠습니까?")) return;
+        const pw = prompt("비밀번호를 입력하세요:");
+        if (!pw) return;
+
+        const fd = new FormData();
+        fd.append('password', pw);
+        try {
+            const res = await fetch('/admin/delete-all', { method: 'POST', body: fd });
+            const result = await res.json();
+            if (result.success) {
+                alert("전체 삭제 완료");
+                location.reload();
+            } else {
+                alert(result.error || "삭제 실패");
+            }
+        } catch (err) { alert("네트워크 오류"); }
+    }
+
+    async function deleteReport(docNumber) {
+        const pw = prompt("삭제하려면 비밀번호를 입력하세요:");
+        if (!pw) return;
+
+        const fd = new FormData();
+        fd.append('password', pw);
+
+        try {
+            const res = await fetch('/admin/delete/' + docNumber, { method: 'POST', body: fd });
+            const result = await res.json();
+            if (result.success) {
+                document.getElementById('row-' + docNumber).remove();
+                // 건수 업데이트
+                const rows = document.querySelectorAll('tbody tr');
+                document.querySelector('.summary').textContent = '총 ' + rows.length + '건';
+                if (rows.length === 0) location.reload();
+            } else {
+                alert(result.error || "삭제 실패");
+            }
+        } catch (err) {
+            alert("네트워크 오류");
+        }
+    }
+    </script>
 </body>
 </html>

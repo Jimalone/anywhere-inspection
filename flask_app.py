@@ -49,6 +49,8 @@ from PIL import Image
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+ADMIN_PASSWORD = "ysfc1234"
+
 PROJECT_INFO = {
     "건식과제": {
         "full_name": "5KPM급 건식전극 연속식 믹싱 장비 및 공정 개발",
@@ -286,6 +288,53 @@ def admin_download_all():
     today = datetime.now().strftime("%Y%m%d")
     return send_file(zip_io, mimetype='application/zip',
                      download_name=f"검수확인서_전체_{today}.zip")
+
+
+@app.route('/admin/delete/<doc_number>', methods=['POST'])
+def admin_delete(doc_number):
+    password = request.form.get('password', '')
+    if password != ADMIN_PASSWORD:
+        return jsonify({"success": False, "error": "비밀번호가 틀렸습니다."}), 403
+
+    # log.json에서 해당 항목 삭제
+    log_data = []
+    if os.path.exists(REPORT_LOG):
+        try:
+            with open(REPORT_LOG, "r", encoding="utf-8") as f:
+                log_data = json.load(f)
+        except:
+            log_data = []
+    log_data = [r for r in log_data if r.get("doc_number") != doc_number]
+    with open(REPORT_LOG, "w", encoding="utf-8") as f:
+        json.dump(log_data, f, ensure_ascii=False, indent=2)
+
+    # PDF 파일 삭제
+    safe_doc = doc_number.replace('-', '_')
+    for d in [REPORTS_DIR, UPLOADS_DIR]:
+        fpath = os.path.join(d, f"{safe_doc}.pdf")
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
+    return jsonify({"success": True})
+
+
+@app.route('/admin/delete-all', methods=['POST'])
+def admin_delete_all():
+    password = request.form.get('password', '')
+    if password != ADMIN_PASSWORD:
+        return jsonify({"success": False, "error": "비밀번호가 틀렸습니다."}), 403
+
+    # log.json 초기화
+    with open(REPORT_LOG, "w", encoding="utf-8") as f:
+        json.dump([], f)
+
+    # PDF 파일 전체 삭제
+    for d in [REPORTS_DIR, UPLOADS_DIR]:
+        for fname in os.listdir(d):
+            if fname.endswith('.pdf'):
+                os.remove(os.path.join(d, fname))
+
+    return jsonify({"success": True})
 
 
 if __name__ == '__main__':
