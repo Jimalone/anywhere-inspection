@@ -51,8 +51,8 @@
             <input type="text" name="name" id="inspectorName" placeholder="성함" required>
             <input type="date" name="date" id="inspectDate" style="margin-top:8px;">
 
-            <label>수신 이메일</label>
-            <input type="email" name="target_email" id="targetEmail" value="{{ default_email }}" placeholder="수신 이메일 주소">
+            <label>PDF 첨부 (선택)</label>
+            <input type="file" name="upload_pdf" id="uploadPdf" accept=".pdf" style="padding:8px;">
 
             <label>사진 업로드 (최대 4장)</label>
             <div class="upload-btns">
@@ -70,7 +70,7 @@
             </div>
             <div class="btn-row">
                 <button type="button" class="btn-main btn-preview" id="previewBtn" onclick="doPreview()">미리보기</button>
-                <button type="submit" class="btn-main btn-send" id="submitBtn">PDF 생성 & 메일 전송</button>
+                <button type="submit" class="btn-main btn-send" id="submitBtn">PDF 생성</button>
             </div>
         </form>
     </div>
@@ -243,12 +243,17 @@
             document.getElementById('previewFrame').src = '';
         }
 
-        // [9번] 제출 + 메일 결과 알림
+        // 제출
         document.getElementById('reportForm').onsubmit = async function(e) {
             e.preventDefault();
             const btn = document.getElementById('submitBtn');
-            btn.disabled = true; btn.innerText = "⏳ 전송 중...";
+            btn.disabled = true; btn.innerText = "⏳ 생성 중...";
             const fd = buildFormData();
+            // 첨부 PDF 추가
+            const uploadInput = document.getElementById('uploadPdf');
+            if (uploadInput.files.length > 0) {
+                fd.append('upload_pdf', uploadInput.files[0]);
+            }
 
             try {
                 const res = await fetch('/generate', { method: 'POST', body: fd });
@@ -259,7 +264,6 @@
                     return;
                 }
 
-                // PDF 다운로드
                 const pdfBytes = Uint8Array.from(atob(result.pdf_data), c => c.charCodeAt(0));
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const url = window.URL.createObjectURL(blob);
@@ -268,30 +272,23 @@
                 a.download = result.file_name;
                 a.click();
 
-                // 메일 결과 알림
-                if (result.mail_ok) {
-                    alert("✅ " + result.target_email + " 발송 완료!");
-                } else {
-                    alert("⚠️ PDF는 생성되었지만 메일 발송 실패!\n\n사유: " + (result.mail_error || "알 수 없는 오류") + "\n\n수신주소: " + result.target_email);
-                }
+                alert("검수확인서가 생성되었습니다.");
             } catch (err) {
                 alert("네트워크 오류");
             } finally {
                 btn.disabled = false;
-                btn.innerText = "PDF 생성 & 메일 전송";
+                btn.innerText = "PDF 생성";
             }
         };
 
         function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
         function saveDefault() {
             localStorage.setItem('dfName', document.getElementById('inspectorName').value);
-            localStorage.setItem('dfEmail', document.getElementById('targetEmail').value);
             alert("정보 저장됨");
         }
         window.onload = () => {
             document.getElementById('inspectDate').value = new Date().toISOString().substring(0, 10);
             if(localStorage.getItem('dfName')) document.getElementById('inspectorName').value = localStorage.getItem('dfName');
-            if(localStorage.getItem('dfEmail')) document.getElementById('targetEmail').value = localStorage.getItem('dfEmail');
         };
     </script>
 </body>

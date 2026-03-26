@@ -3,10 +3,11 @@ import io
 import uuid
 import json
 import base64
-import smtplib
+import zipfile
 from datetime import datetime
 
 from flask import Flask, render_template, request, send_file, jsonify
+from werkzeug.utils import secure_filename
 import tempfile
 import xhtml2pdf.files as _xhtml2pdf_files
 
@@ -43,23 +44,10 @@ def _patched_get_named(self):
 _xhtml2pdf_files.BaseFile.get_named_tmp_file = _patched_get_named
 
 from xhtml2pdf import pisa
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email import encoders
-from email.header import Header
-from urllib.parse import quote
 from PIL import Image
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# --- [이메일 설정] ---
-SMTP_SERVER = "portal.ysfc.co.kr"
-SMTP_PORT = 465
-SMTP_USER = "ai-rnd@ysfc.co.kr"
-SMTP_PASSWORD = "rd5925@@"
-DEFAULT_EMAIL = "ai-rnd@ysfc.co.kr"
 
 PROJECT_INFO = {
     "건식과제": {
@@ -75,8 +63,10 @@ PROJECT_INFO = {
 # --- [검수확인서 번호 생성] ---
 COUNTER_FILE = os.path.join(BASE_DIR, "doc_counter.json")
 REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 REPORT_LOG = os.path.join(REPORTS_DIR, "log.json")
 os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 def generate_doc_number():
     today = datetime.now().strftime("%Y-%m%d")
@@ -93,36 +83,9 @@ def generate_doc_number():
         json.dump(data, f)
     return f"{today}-{count:03d}"
 
-def send_pdf_email(file_name, pdf_content, target_email):
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = SMTP_USER
-        msg['To'] = target_email
-        msg['Subject'] = Header(f"[{file_name}] 검수확인서 자동 발송", 'utf-8').encode()
-
-        body = f"안녕하세요. 시스템에서 생성된 {file_name} 파일을 보내드립니다."
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(pdf_content)
-        encoders.encode_base64(part)
-
-        encoded_filename = Header(file_name, 'utf-8').encode()
-        part.add_header('Content-Disposition', 'attachment', filename=encoded_filename)
-        msg.attach(part)
-
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, target_email, msg.as_string())
-        server.quit()
-        return True, ""
-    except Exception as e:
-        print(f"Mail Error: {e}")
-        return False, str(e)
-
 @app.route('/')
 def index():
-    return render_template('index.html', projects=PROJECT_INFO.keys(), default_email=DEFAULT_EMAIL)
+    return render_template('index.html', projects=PROJECT_INFO.keys())
 
 def build_pdf(form, is_preview=False):
     """PDF 생성 공통 로직. (is_preview=True면 문서번호 미부여)"""
@@ -206,42 +169,48 @@ def generate():
     if error:
         return jsonify({"success": False, "error": error}), 500
 
-    target_email = request.form.get('target_email', DEFAULT_EMAIL).strip()
-    if not target_email:
-        target_email = DEFAULT_EMAIL
-
-    mail_ok, mail_error = send_pdf_email(file_name, pdf_bytes, target_email)
+    # 업로드 PDF 저장
+    upload_name = ""
+    upload_file = request.files.get('upload_pdf')
+    if upload_file and upload_file.filename:
+        ext = os.path.splitext(upload_file.filename)[1].lower()
+        if ext == '.pdf':
+            # 문서번호 기반 파일명으로 저장
+            with open(COUNTER_FILE, "r") as f:
+                counter_data = json.load(f)
+            today = datetime.now().strftime("%Y-%m%d")
+            count = counter_data.get(today, 1)
+            doc_number = f"{today}-{count:03d}"
+            safe_doc = doc_number.replace('-', '_')
+            upload_path = os.path.join(UPLOADS_DIR, f"{safe_doc}.pdf")
+            upload_file.save(upload_path)
+            upload_name = upload_file.filename
 
     # 발행 이력 저장
-    save_report_log(request.form, file_name, pdf_bytes, mail_ok)
+    save_report_log(request.form, file_name, pdf_bytes, upload_name)
 
     pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
     return jsonify({
         "success": True,
-        "mail_ok": mail_ok,
-        "mail_error": mail_error,
-        "target_email": target_email,
         "file_name": file_name,
         "pdf_data": pdf_b64
     })
 
-def save_report_log(form, file_name, pdf_bytes, mail_ok):
+def save_report_log(form, file_name, pdf_bytes, upload_name):
     """발행된 검수확인서 PDF 저장 및 이력 기록"""
     try:
-        # 문서번호 추출 (파일명에서 역산하지 않고 카운터에서 현재값 사용)
         with open(COUNTER_FILE, "r") as f:
             counter_data = json.load(f)
         today = datetime.now().strftime("%Y-%m%d")
         count = counter_data.get(today, 1)
         doc_number = f"{today}-{count:03d}"
 
-        # PDF 파일 저장
+        # 검수확인서 PDF 저장
         safe_doc = doc_number.replace('-', '_')
         pdf_path = os.path.join(REPORTS_DIR, f"{safe_doc}.pdf")
         with open(pdf_path, 'wb') as f:
             f.write(pdf_bytes)
 
-        # 로그 기록
         entry = {
             "doc_number": doc_number,
             "date": form.get('date', ''),
@@ -249,8 +218,7 @@ def save_report_log(form, file_name, pdf_bytes, mail_ok):
             "product": form.get('product', ''),
             "customer": form.get('customer', ''),
             "name": form.get('name', ''),
-            "email": form.get('target_email', DEFAULT_EMAIL),
-            "mail_ok": mail_ok,
+            "upload_file": upload_name,
             "file_name": file_name,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -290,6 +258,35 @@ def admin_download(doc_number):
         return "파일을 찾을 수 없습니다.", 404
     return send_file(pdf_path, mimetype='application/pdf',
                      download_name=f"검수확인서_{doc_number}.pdf")
+
+
+@app.route('/admin/upload/<doc_number>')
+def admin_upload_download(doc_number):
+    safe_doc = doc_number.replace('-', '_')
+    pdf_path = os.path.join(UPLOADS_DIR, f"{safe_doc}.pdf")
+    if not os.path.exists(pdf_path):
+        return "파일을 찾을 수 없습니다.", 404
+    return send_file(pdf_path, mimetype='application/pdf',
+                     download_name=f"첨부_{doc_number}.pdf")
+
+
+@app.route('/admin/download-all')
+def admin_download_all():
+    zip_io = io.BytesIO()
+    with zipfile.ZipFile(zip_io, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in os.listdir(REPORTS_DIR):
+            if fname.endswith('.pdf'):
+                fpath = os.path.join(REPORTS_DIR, fname)
+                zf.write(fpath, f"검수확인서/{fname}")
+        for fname in os.listdir(UPLOADS_DIR):
+            if fname.endswith('.pdf'):
+                fpath = os.path.join(UPLOADS_DIR, fname)
+                zf.write(fpath, f"첨부파일/{fname}")
+    zip_io.seek(0)
+    today = datetime.now().strftime("%Y%m%d")
+    return send_file(zip_io, mimetype='application/zip',
+                     download_name=f"검수확인서_전체_{today}.zip")
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

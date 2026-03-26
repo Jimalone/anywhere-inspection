@@ -4,3 +4,4 @@ doc_counter.json
 temp_*
 .env
 reports/
+uploads/
