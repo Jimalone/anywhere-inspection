@@ -6,7 +6,14 @@
       "Bash(ls:*)",
       "Bash(mv:*)",
       "Bash(cp:*)",
-      "WebFetch(domain:checking-production-953c.up.railway.app)"
+      "WebFetch(domain:checking-production-953c.up.railway.app)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python flask_app.py)",
+      "Bash(pip install:*)",
+      "Bash(python -c \":*)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

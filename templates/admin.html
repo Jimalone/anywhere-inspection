@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>검수확인서 발행 이력</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 1.4rem; margin-bottom: 15px; color: #333; }
+        .summary { font-size: 0.9rem; color: #666; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 10px 12px; text-align: center; border-bottom: 1px solid #eee; font-size: 0.85rem; white-space: nowrap; }
+        th { background: #2c3e50; color: #fff; font-weight: 600; position: sticky; top: 0; }
+        tr:hover { background: #f8f9fa; }
+        .btn-download { display: inline-block; padding: 5px 12px; background: #3498db; color: #fff; text-decoration: none; border-radius: 4px; font-size: 0.8rem; }
+        .btn-download:hover { background: #2980b9; }
+        .mail-ok { color: #27ae60; }
+        .mail-fail { color: #e74c3c; }
+        .empty { text-align: center; padding: 60px 20px; color: #999; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #3498db; text-decoration: none; font-size: 0.9rem; }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            th, td { padding: 6px 4px; font-size: 0.75rem; }
+            .hide-mobile { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">&larr; 검수확인서 작성</a>
+        <h1>검수확인서 발행 이력</h1>
+        <p class="summary">총 {{ reports|length }}건</p>
+
+        {% if reports %}
+        <table>
+            <thead>
+                <tr>
+                    <th>문서번호</th>
+                    <th>발행일</th>
+                    <th>과제</th>
+                    <th>품명</th>
+                    <th class="hide-mobile">거래처</th>
+                    <th>검수자</th>
+                    <th class="hide-mobile">메일</th>
+                    <th>PDF</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td>{{ r.doc_number }}</td>
+                    <td>{{ r.date }}</td>
+                    <td>{{ r.project }}</td>
+                    <td>{{ r.product }}</td>
+                    <td class="hide-mobile">{{ r.customer }}</td>
+                    <td>{{ r.name }}</td>
+                    <td class="hide-mobile">
+                        {% if r.mail_ok %}
+                            <span class="mail-ok">O</span>
+                        {% else %}
+                            <span class="mail-fail">X</span>
+                        {% endif %}
+                    </td>
+                    <td><a href="/admin/download/{{ r.doc_number }}" class="btn-download">다운로드</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">발행된 검수확인서가 없습니다.</div>
+        {% endif %}
+    </div>
+</body>
+</html>

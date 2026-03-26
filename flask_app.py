@@ -7,6 +7,41 @@ import smtplib
 from datetime import datetime
 
 from flask import Flask, render_template, request, send_file, jsonify
+import tempfile
+import xhtml2pdf.files as _xhtml2pdf_files
+
+# --- [xhtml2pdf Windows file:/// URI 패치] ---
+_orig_extract = _xhtml2pdf_files.LocalProtocolURI.extract_data
+def _patched_extract(self):
+    path = self.path
+    if path and path.startswith('file:///'):
+        local_path = path[8:]
+        if os.path.isfile(local_path):
+            self.uri = local_path
+            with open(local_path, 'rb') as f:
+                return f.read()
+    elif path and len(path) > 2 and path[0] == '/' and path[2] == ':':
+        local_path = path[1:]
+        if os.path.isfile(local_path):
+            self.uri = local_path
+            with open(local_path, 'rb') as f:
+                return f.read()
+    return _orig_extract(self)
+_xhtml2pdf_files.LocalProtocolURI.extract_data = _patched_extract
+
+def _patched_get_named(self):
+    data = self.get_data()
+    tmp_file = tempfile.NamedTemporaryFile(suffix=self.suffix, delete=False)
+    if data:
+        tmp_file.write(data)
+        tmp_file.flush()
+        tmp_file.close()
+        _xhtml2pdf_files.files_tmp.append(tmp_file)
+    if self.path is None:
+        self.path = tmp_file.name
+    return tmp_file
+_xhtml2pdf_files.BaseFile.get_named_tmp_file = _patched_get_named
+
 from xhtml2pdf import pisa
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -39,6 +74,9 @@ PROJECT_INFO = {
 
 # --- [검수확인서 번호 생성] ---
 COUNTER_FILE = os.path.join(BASE_DIR, "doc_counter.json")
+REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+REPORT_LOG = os.path.join(REPORTS_DIR, "log.json")
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 def generate_doc_number():
     today = datetime.now().strftime("%Y-%m%d")
@@ -174,7 +212,9 @@ def generate():
 
     mail_ok, mail_error = send_pdf_email(file_name, pdf_bytes, target_email)
 
-    # PDF를 base64로 인코딩하여 JSON 응답에 포함
+    # 발행 이력 저장
+    save_report_log(request.form, file_name, pdf_bytes, mail_ok)
+
     pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
     return jsonify({
         "success": True,
@@ -184,6 +224,72 @@ def generate():
         "file_name": file_name,
         "pdf_data": pdf_b64
     })
+
+def save_report_log(form, file_name, pdf_bytes, mail_ok):
+    """발행된 검수확인서 PDF 저장 및 이력 기록"""
+    try:
+        # 문서번호 추출 (파일명에서 역산하지 않고 카운터에서 현재값 사용)
+        with open(COUNTER_FILE, "r") as f:
+            counter_data = json.load(f)
+        today = datetime.now().strftime("%Y-%m%d")
+        count = counter_data.get(today, 1)
+        doc_number = f"{today}-{count:03d}"
+
+        # PDF 파일 저장
+        safe_doc = doc_number.replace('-', '_')
+        pdf_path = os.path.join(REPORTS_DIR, f"{safe_doc}.pdf")
+        with open(pdf_path, 'wb') as f:
+            f.write(pdf_bytes)
+
+        # 로그 기록
+        entry = {
+            "doc_number": doc_number,
+            "date": form.get('date', ''),
+            "project": form.get('project', ''),
+            "product": form.get('product', ''),
+            "customer": form.get('customer', ''),
+            "name": form.get('name', ''),
+            "email": form.get('target_email', DEFAULT_EMAIL),
+            "mail_ok": mail_ok,
+            "file_name": file_name,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        log_data = []
+        if os.path.exists(REPORT_LOG):
+            try:
+                with open(REPORT_LOG, "r", encoding="utf-8") as f:
+                    log_data = json.load(f)
+            except:
+                log_data = []
+        log_data.append(entry)
+        with open(REPORT_LOG, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Report log error: {e}")
+
+
+@app.route('/admin')
+def admin():
+    log_data = []
+    if os.path.exists(REPORT_LOG):
+        try:
+            with open(REPORT_LOG, "r", encoding="utf-8") as f:
+                log_data = json.load(f)
+        except:
+            log_data = []
+    log_data.reverse()
+    return render_template('admin.html', reports=log_data)
+
+
+@app.route('/admin/download/<doc_number>')
+def admin_download(doc_number):
+    safe_doc = doc_number.replace('-', '_')
+    pdf_path = os.path.join(REPORTS_DIR, f"{safe_doc}.pdf")
+    if not os.path.exists(pdf_path):
+        return "파일을 찾을 수 없습니다.", 404
+    return send_file(pdf_path, mimetype='application/pdf',
+                     download_name=f"검수확인서_{doc_number}.pdf")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

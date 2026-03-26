@@ -3,3 +3,4 @@ __pycache__/
 doc_counter.json
 temp_*
 .env
+reports/
